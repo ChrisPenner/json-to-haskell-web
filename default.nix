@@ -28,8 +28,8 @@ let
     # `callHackageDirect`.
     json-to-haskell = final.callHackageDirect {
       pkg = "json-to-haskell";
-      ver = "0.0.1.0";
-      sha256 = "0a9v8cmcidpav62b1cks41q4s62s34p60ad8isn8kgi34s331xwf";
+      ver = "0.1.1.0";
+      sha256 = "0181hzwqd573rqv0s4p5r4jd92fyc7hqs3xnkqaif3xk3zvg335p";
     } {};
 
     # There are various dependencies that appear to be marked as broken.  Here,

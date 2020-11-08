@@ -8,24 +8,45 @@ module Main where
 import Miso hiding (defaultOptions)
 import Miso.String
 import Data.Aeson hiding (defaultOptions)
-import JsonToHaskell (jsonToHaskell, defaultOptions)
+import JsonToHaskell (jsonToHaskell, simpleOptions, Options(..))
 
 -- | Type synonym for an application model
-type Model = (MisoString, MisoString)
+data Model = Model
+    { input :: MisoString
+    , output :: MisoString
+    , strict :: Bool
+    , includeHeader :: Bool
+    , includeInstances :: Bool
+    , prefixRecordFields :: Bool
+    } deriving (Show, Eq, Ord)
 
 -- | Sum type for application events
 data Action
   =
   NoOp
   | Update MisoString
+  | Toggle Toggles
   deriving (Show, Eq)
+
+data Toggles =
+    Strict
+      | IncludeHeader
+      | IncludeInstances
+      | PrefixRecordFields
+    deriving (Show, Eq)
 
 -- | Entry point for a miso application
 main :: IO ()
 main = startApp App {..}
   where
     initialAction = NoOp -- initial action to be executed on application load
-    model  = ("", "")                    -- initial model
+    model  = Model { input=""
+                   , output=""
+                   , strict=False
+                   , includeHeader=True
+                   , includeInstances=True
+                   , prefixRecordFields=True
+                   }                    -- initial model
     update = updateModel          -- update function
     view   = viewModel            -- view function
     events = defaultEvents        -- default delegated events
@@ -35,28 +56,51 @@ main = startApp App {..}
 
 -- | Updates model, optionally introduces side effects
 updateModel :: Action -> Model -> Effect Action Model
-updateModel (Update newSrc) _ =
-    case eitherDecode (fromMisoString newSrc) of
-        Left err -> noEff (newSrc, ms err)
-        Right value -> noEff (newSrc, ms $ jsonToHaskell defaultOptions value)
+updateModel (Update newSrc) model = noEff $ rerender model{input=newSrc}
+updateModel (Toggle t) model =
+    noEff $ case t of
+        Strict -> rerender model{strict=not $ strict model}
+        IncludeHeader -> rerender model{includeHeader=not $ includeHeader model}
+        IncludeInstances -> rerender model{includeInstances=not $ includeInstances model}
+        PrefixRecordFields -> rerender model{prefixRecordFields=not $ prefixRecordFields model}
 updateModel NoOp m = noEff m
+
+rerender :: Model -> Model
+rerender model =
+    let opts = simpleOptions 
+                { _tabStop = 2
+                -- , _numberType = UseDoubles
+                -- , _textType = UseText
+                -- , _mapType = UseMap
+                -- , _listType = UseList
+                , _includeHeader = includeHeader model
+                , _includeInstances = includeInstances model
+                , _strictData = strict model
+                , _prefixRecordFields = prefixRecordFields model
+                }
+     in case eitherDecode (fromMisoString (input model)) of
+        Left err -> model{output=ms err}
+        Right value -> model{output=ms $ jsonToHaskell opts value}
+
+checkBox :: MisoString -> Bool -> Toggles -> View Action
+checkBox name val toggle =
+    label_ [] [ input_ [type_ "checkbox", checked_ val, onClick (Toggle toggle)], text name]
 
 -- | Constructs a virtual DOM from a model
 viewModel :: Model -> View Action
-viewModel (src, out) =
+viewModel model =
     div_ []
-         [ h1_ [class_ "title"] []
+         [ h1_ [class_ "title"] [ text "JSON to Haskell" ]
          , h2_ [class_ "links"]
-               [ text "JSON to Haskell"
-               , a_ [ href_ "https://github.com/ChrisPenner/json-to-haskell"
+               [ a_ [ href_ "https://github.com/ChrisPenner/json-to-haskell"
                     ]
                     [text "Github"]
                , text " | "
-               , a_ [ href_ "https://github.com/ChrisPenner/json-to-haskell"
+               , a_ [ href_ "https://hackage.haskell.org/package/json-to-haskell"
                     ]
                     [text "CLI version (Hackage)"]
                , text " | "
-               , a_ [ href_ "https://hackage.haskell.org/package/json-to-haskell"
+               , a_ [ href_ "https://chrispenner.ca"
                     ]
                     [text "Chris's Blog"]
                , text " | "
@@ -64,15 +108,19 @@ viewModel (src, out) =
                     ]
                     [text "Chris's Twitter"]
                ]
+         , div_ [class_ "settings"] [ checkBox "Include Module Header" (includeHeader model) IncludeHeader
+                                    , checkBox "Include JSON Instances" (includeInstances model) IncludeInstances
+                                    , checkBox "Strict Data" (strict model) Strict
+                                    ]
          , div_ [class_ "container"]
                 [ div_ [class_ "input"]
                        [ h2_ [] [text "Paste JSON Here"]
-                       , textarea_ [value_ src, onInput Update]
+                       , textarea_ [value_ (input model), onInput Update]
                                    []
                        ]
                 , div_ [class_ "output"]
                        [ h2_ [] [text "Copy Haskell Here"]
-                       , textarea_ [value_ out] []
+                       , textarea_ [value_ (output model)] []
                        ]
                 ]
          ]
