@@ -39,6 +39,10 @@ let
     hedgehog-fn = haskell-lib.overrideCabal prev.hedgehog-fn { broken = false; };
     time-parsers = haskell-lib.overrideCabal prev.time-parsers { broken = false; };
     nonempty-containers = haskell-lib.overrideCabal prev.nonempty-containers { broken = false; };
+
+    # QuickCheck's tests don't work on GHCJS, so we disable the tests.
+    # This lets the QuickCheck derivation build fine.
+    QuickCheck = haskell-lib.dontCheck prev.QuickCheck;
   };
 
   # Here we create the actual package set by passing our set of overrides.
