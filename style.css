@@ -1,0 +1,10 @@
+.container {
+  display: flex;
+  flex-flow: row;
+  min-height: 90vh;
+}
+
+.input,
+.output {
+  flex: 1;
+}
