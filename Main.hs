@@ -1,6 +1,7 @@
 -- | Haskell language pragma
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
 -- | Haskell module declaration
 module Main where
 
@@ -8,7 +9,7 @@ module Main where
 import Miso hiding (defaultOptions)
 import Miso.String
 import Data.Aeson hiding (defaultOptions)
-import JsonToHaskell (jsonToHaskell, simpleOptions, Options(..))
+import JsonToHaskell
 
 -- | Type synonym for an application model
 data Model = Model
@@ -18,7 +19,10 @@ data Model = Model
     , includeHeader :: Bool
     , includeInstances :: Bool
     , prefixRecordFields :: Bool
-    } deriving (Show, Eq, Ord)
+    , textType :: TextType
+    , listType :: ListType
+    , numberType :: NumberType
+    } deriving (Show, Eq)
 
 -- | Sum type for application events
 data Action
@@ -26,6 +30,7 @@ data Action
   NoOp
   | Update MisoString
   | Toggle Toggles
+  | Select Selects
   deriving (Show, Eq)
 
 data Toggles =
@@ -34,6 +39,33 @@ data Toggles =
       | IncludeInstances
       | PrefixRecordFields
     deriving (Show, Eq)
+
+data Selects =
+    NType MisoString
+    | MType MisoString
+    | LType MisoString
+    | TType MisoString
+    deriving (Eq, Show, Ord)
+
+showStringType :: TextType -> MisoString
+showStringType = \case
+  UseText -> "Text"
+  UseString -> "String"
+  UseByteString -> "ByteString"
+
+showListType :: ListType -> MisoString
+showListType = \case
+  UseList -> "List"
+  UseVector -> "Vector"
+
+showNumberType :: NumberType -> MisoString
+showNumberType = \case
+  UseSmartFloats -> "Smart Floats"
+  UseSmartDoubles -> "Smart Doubles"
+  UseFloats -> "Floats"
+  UseDoubles -> "Doubles"
+  UseScientific -> "Scientific"
+
 
 -- | Entry point for a miso application
 main :: IO ()
@@ -46,6 +78,9 @@ main = startApp App {..}
                    , includeHeader=True
                    , includeInstances=True
                    , prefixRecordFields=True
+                   , textType=UseText
+                   , listType=UseList
+                   , numberType=UseDoubles
                    }                    -- initial model
     update = updateModel          -- update function
     view   = viewModel            -- view function
@@ -57,22 +92,35 @@ main = startApp App {..}
 -- | Updates model, optionally introduces side effects
 updateModel :: Action -> Model -> Effect Action Model
 updateModel (Update newSrc) model = noEff $ rerender model{input=newSrc}
+updateModel (Select s) model =
+    noEff . rerender $ case s of
+        TType "Text" -> model{textType=UseText}
+        TType "ByteString" -> model{textType=UseByteString}
+        TType "String" -> model{textType=UseString}
+        LType "List" -> model{listType=UseList}
+        LType "Vector" -> model{listType=UseVector}
+        NType "Smart Floats" -> model{numberType=UseSmartFloats}
+        NType "Smart Doubles" -> model{numberType=UseSmartDoubles}
+        NType "Floats" -> model{numberType=UseFloats}
+        NType "Doubles" -> model{numberType=UseDoubles}
+        NType "Scientific" -> model{numberType=UseScientific}
+        _ -> model
 updateModel (Toggle t) model =
-    noEff $ case t of
-        Strict -> rerender model{strict=not $ strict model}
-        IncludeHeader -> rerender model{includeHeader=not $ includeHeader model}
-        IncludeInstances -> rerender model{includeInstances=not $ includeInstances model}
-        PrefixRecordFields -> rerender model{prefixRecordFields=not $ prefixRecordFields model}
+    noEff . rerender $ case t of
+        Strict -> model{strict=not $ strict model}
+        IncludeHeader -> model{includeHeader=not $ includeHeader model}
+        IncludeInstances -> model{includeInstances=not $ includeInstances model}
+        PrefixRecordFields -> model{prefixRecordFields=not $ prefixRecordFields model}
 updateModel NoOp m = noEff m
 
 rerender :: Model -> Model
 rerender model =
-    let opts = simpleOptions 
+    let opts = simpleOptions
                 { _tabStop = 2
-                -- , _numberType = UseDoubles
-                -- , _textType = UseText
+                , _numberType = numberType model
+                , _textType = textType model
                 -- , _mapType = UseMap
-                -- , _listType = UseList
+                , _listType = listType model
                 , _includeHeader = includeHeader model
                 , _includeInstances = includeInstances model
                 , _strictData = strict model
@@ -86,11 +134,27 @@ checkBox :: MisoString -> Bool -> Toggles -> View Action
 checkBox name val toggle =
     label_ [] [ input_ [type_ "checkbox", checked_ val, onClick (Toggle toggle)], text name]
 
+select :: MisoString
+       -> MisoString
+       -> [MisoString]
+       -> (MisoString -> Selects)
+       -> View Action
+select name val strs buildSelect =
+    label_ []
+           [ text name
+           , select_ [onInput (Select . buildSelect)]
+                     (fmap buildOpt strs)
+           ]
+  where
+    buildOpt s =
+        option_ [selected_ (val == s), value_ s] [text s]
+
+
 -- | Constructs a virtual DOM from a model
 viewModel :: Model -> View Action
 viewModel model =
     div_ []
-         [ h1_ [class_ "title"] [ text "JSON to Haskell" ]
+         [ h1_ [class_ "title"] [text "JSON to Haskell"]
          , h2_ [class_ "links"]
                [ a_ [ href_ "https://github.com/ChrisPenner/json-to-haskell"
                     ]
@@ -100,27 +164,58 @@ viewModel model =
                     ]
                     [text "CLI version (Hackage)"]
                , text " | "
-               , a_ [ href_ "https://chrispenner.ca"
-                    ]
+               , a_ [href_ "https://chrispenner.ca"]
                     [text "Chris's Blog"]
                , text " | "
-               , a_ [ href_ "https://twitter.com/chrislpenner"
-                    ]
+               , a_ [href_ "https://twitter.com/chrislpenner"]
                     [text "Chris's Twitter"]
                ]
-         , div_ [class_ "settings"] [ checkBox "Include Module Header" (includeHeader model) IncludeHeader
-                                    , checkBox "Include JSON Instances" (includeInstances model) IncludeInstances
-                                    , checkBox "Strict Data" (strict model) Strict
-                                    ]
+         , div_ [class_ "settings"]
+                [ div_ []
+                       [ checkBox "Include Module Header"
+                                  (includeHeader model)
+                                  IncludeHeader
+                       , checkBox "Include JSON Instances"
+                                  (includeInstances model)
+                                  IncludeInstances
+                       , checkBox "Strict Data"
+                                  (strict model)
+                                  Strict
+                       ]
+                , div_ []
+                       [ select "String Type"
+                                (showStringType (textType model))
+                                ["Text", "String", "ByteString"]
+                                TType
+                       , select "List Type"
+                                (showListType (listType model))
+                                ["List", "Vector"]
+                                LType
+                       , select "Number Type"
+                                (showNumberType (numberType model))
+                                [ "Smart Floats"
+                                , "Smart Doubles"
+                                , "Floats"
+                                , "Doubles"
+                                , "Scientific"
+                                ]
+                                NType
+                       ]
+                ]
          , div_ [class_ "container"]
                 [ div_ [class_ "input"]
-                       [ h2_ [] [text "Paste JSON Here"]
-                       , textarea_ [value_ (input model), onInput Update]
+                       [ h2_ [] [text "Paste JSON"]
+                       , textarea_ [ value_ (input model)
+                                   , onInput Update
+                                   ]
                                    []
                        ]
                 , div_ [class_ "output"]
-                       [ h2_ [] [text "Copy Haskell Here"]
-                       , textarea_ [value_ (output model)] []
+                       [ h2_ [] [text "Copy Haskell"]
+                       , textarea_ [ disabled_ True
+                                   , value_ (output model)
+                                   ]
+                                   []
                        ]
                 ]
          ]
