@@ -155,6 +155,7 @@ viewModel :: Model -> View Action
 viewModel model =
     div_ [class_ "main"]
          [ h1_ [class_ "title"] [text "JSON to Haskell"]
+         , h2_ [class_ "install"] [textarea_ [disabled_ True, value_ "stack install json-to-haskell"] []]
          , h2_ [class_ "links"]
                [ a_ [ href_ "https://github.com/ChrisPenner/json-to-haskell"
                     , target_ "_blank"
