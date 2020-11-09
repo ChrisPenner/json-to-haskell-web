@@ -27,7 +27,7 @@ data Model = Model
 -- | Sum type for application events
 data Action
   =
-  NoOp
+  Rerender
   | Update MisoString
   | Toggle Toggles
   | Select Selects
@@ -71,8 +71,8 @@ showNumberType = \case
 main :: IO ()
 main = startApp App {..}
   where
-    initialAction = NoOp -- initial action to be executed on application load
-    model  = Model { input=""
+    initialAction = Rerender -- initial action to be executed on application load
+    model  = Model { input="{ \"company\": \n { \"employees\": \n    [ {\"name\": \"Jon\", \"age\": 32} \n    , {\"name\": \"Alice\", \"age\": 27} \n    ] \n , \"star_rating\": 4.7 \n } \n}"
                    , output=""
                    , strict=False
                    , includeHeader=True
@@ -80,7 +80,7 @@ main = startApp App {..}
                    , prefixRecordFields=True
                    , textType=UseText
                    , listType=UseList
-                   , numberType=UseDoubles
+                   , numberType=UseSmartDoubles
                    }                    -- initial model
     update = updateModel          -- update function
     view   = viewModel            -- view function
@@ -111,7 +111,7 @@ updateModel (Toggle t) model =
         IncludeHeader -> model{includeHeader=not $ includeHeader model}
         IncludeInstances -> model{includeInstances=not $ includeInstances model}
         PrefixRecordFields -> model{prefixRecordFields=not $ prefixRecordFields model}
-updateModel NoOp m = noEff m
+updateModel Rerender m = noEff $ rerender m
 
 rerender :: Model -> Model
 rerender model =
@@ -153,25 +153,31 @@ select name val strs buildSelect =
 -- | Constructs a virtual DOM from a model
 viewModel :: Model -> View Action
 viewModel model =
-    div_ []
+    div_ [class_ "main"]
          [ h1_ [class_ "title"] [text "JSON to Haskell"]
          , h2_ [class_ "links"]
                [ a_ [ href_ "https://github.com/ChrisPenner/json-to-haskell"
+                    , target_ "_blank"
                     ]
                     [text "Github"]
                , text " | "
                , a_ [ href_ "https://hackage.haskell.org/package/json-to-haskell"
+                    , target_ "_blank"
                     ]
                     [text "CLI version (Hackage)"]
                , text " | "
-               , a_ [href_ "https://chrispenner.ca"]
+               , a_ [ href_ "https://chrispenner.ca"
+                    , target_ "_blank"
+                    ]
                     [text "Chris's Blog"]
                , text " | "
-               , a_ [href_ "https://twitter.com/chrislpenner"]
+               , a_ [ href_ "https://twitter.com/chrislpenner"
+                    , target_ "_blank"
+                    ]
                     [text "Chris's Twitter"]
                ]
          , div_ [class_ "settings"]
-                [ div_ []
+                [ div_ [class_ "checkboxes"]
                        [ checkBox "Include Module Header"
                                   (includeHeader model)
                                   IncludeHeader
@@ -182,16 +188,16 @@ viewModel model =
                                   (strict model)
                                   Strict
                        ]
-                , div_ []
-                       [ select "String Type"
+                , div_ [class_ "selects"]
+                       [ select "String Type: "
                                 (showStringType (textType model))
                                 ["Text", "String", "ByteString"]
                                 TType
-                       , select "List Type"
+                       , select "List Type: "
                                 (showListType (listType model))
                                 ["List", "Vector"]
                                 LType
-                       , select "Number Type"
+                       , select "Number Type: "
                                 (showNumberType (numberType model))
                                 [ "Smart Floats"
                                 , "Smart Doubles"
