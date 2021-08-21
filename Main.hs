@@ -185,6 +185,9 @@ viewModel model =
                        , checkBox "Include JSON Instances"
                                   (includeInstances model)
                                   IncludeInstances
+                       , checkBox "Prefix Record Fields"
+                                  (prefixRecordFields model)
+                                  PrefixRecordFields
                        , checkBox "Strict Data"
                                   (strict model)
                                   Strict
